@@ -1,10 +1,8 @@
 <h1 align="center">⚽ Data-Driven Shot Decision Analysis</h1>
 
 <p align="center">
-  <strong>
-    From “Selfish” to Optimal — Evaluating Football Shot Decisions
-    with Expected Goals, Possession Sequences, and Match Context
-  </strong>
+  <b>From “Selfish” to Optimal</b><br>
+  Quantifying football shot-selection quality with xG, possession sequences, spatial features, and match context.
 </p>
 
 <p align="center">
@@ -15,257 +13,141 @@
   <img src="https://img.shields.io/badge/SC3021-Data%20Science-B7FF00">
 </p>
 
-🎯 Project Overview
-Football players are often labelled as “selfish” when they choose to shoot instead of passing.
-However, judging a decision only by its outcome can be misleading:
-A missed shot does not necessarily imply a poor decision, and a goal does not always imply an optimal one.
+<p align="center">
+  <a href="SC3021_GP11_LAB2_16_15.ipynb"><b>📓 Notebook</b></a>
+  &nbsp;&nbsp;•&nbsp;&nbsp;
+  <a href="SC3021%20GP11%20-%20Colab%20lab2%20overall%20output.pdf"><b>📄 Full Output</b></a>
+  &nbsp;&nbsp;•&nbsp;&nbsp;
+  <a href="SC3021_Shot_Decision_Presentation_compressed.pdf"><b>🎤 Presentation</b></a>
+</p>
 
-This project reframes that subjective football discussion as a data-science problem by comparing the expected value of an actual shot with the historical expected value of continuing the possession through a pass.
-Research Question
-Can we quantify and compare player-level shooting decision quality using expected value differences derived from match-event data?
+🎯 Research Question
+Can we quantify and compare player-level shooting decision quality using expected-value differences derived from match-event data?
 
-📊 Data at a Glance
-Data Layer	Scale	Purpose
-Premier League match results	3,800 matches / 10 seasons	Match-level historical context
-StatsBomb match data	418 matches	Match metadata
-StatsBomb event data	1,443,184 events	Event-level analysis
-Shot table	10,837 shots	Actual shooting decisions
-Pass table	404,785 passes	Passing behaviour
-Pass → shot sequences	52,180	Estimate alternative passing value
-Pitch representation	16 zones	Spatial aggregation
+The project compares the value of the shot actually taken with a historical estimate of the passing continuation available from the same pitch zone.
+📊 Project at a Glance
+Metric	Scale	Metric	Scale
+Match-level history	3,800 matches	Historical window	10 seasons
+StatsBomb matches	418	StatsBomb events	1,443,184
+Shot events	10,837	Pass events	404,785
+Pass → shot links	52,180	Pitch zones	16
 
 
-Coverage note: the ten-season window refers to match-level historical results. StatsBomb Open Data provides a smaller Premier League event-level window, so the two sources do not have identical temporal coverage.
+Coverage note: the 10-season window applies to match-level results. StatsBomb event-level EPL coverage is smaller.
 
-🧠 Core Idea
-For every shot, the project compares:
-- xG_shot — expected-goal value of the shot actually taken
-- xG_pass — estimated historical expected value of continuing possession through a pass from the same pitch zone
-The central comparison is:
-Δ = xG_pass - xG_shot
-Interpretation
-Δ > 0  → historical passing continuation had higher expected value
-Δ < 0  → the shot itself had higher expected value
-The project then extends this comparison using contextual information:
-Decision Cost = Δ × Context Factor
-The original framework considers contextual variables including:
-Match Time
-Score State
-Recent Form
-League Position
-🔄 Methodology
+🔄 Pipeline
 <p align="center">
   <a href="Data%20preparation%20pipeline.png">
-    <img
-      src="Data%20preparation%20pipeline.png"
-      alt="Data preparation pipeline"
-      width="92%"
-    >
+    <img src="Data%20preparation%20pipeline.png" alt="Data preparation pipeline" width="94%">
   </a>
 </p>
 
-Premier League Results + StatsBomb Events
-                    ↓
-          Data Cleaning & Standardization
-                    ↓
-            Shot / Pass Extraction
-                    ↓
-              4 × 4 Pitch Zoning
-                    ↓
-     Same-Possession Pass → Shot Linking
-                    ↓
-       Passing-Alternative Estimation
-                    ↓
-             Match Context
-                    ↓
-             Decision Cost
-                    ↓
-           Player-Level Analysis
-1. Event Extraction
-StatsBomb data is stored as nested JSON.
-The notebook transforms this into structured analytical tables by extracting fields including:
-Event type
-Team
-Player
-Possession
-Shot xG
-Shot outcome
-Pitch coordinates
-Pass destination
-Match metadata
-This produces separate shot and pass tables suitable for downstream analysis.
-2. Spatial Feature Engineering
-The StatsBomb pitch coordinate system is divided into a:
-4 × 4 grid
-producing:
-16 pitch zones
-Each shot and pass is assigned to one of these zones.
-This allows the project to estimate historical passing value conditional on the spatial origin of the action.
-3. Same-Possession Sequence Matching
-For every pass, the pipeline searches for:
-the next shot by the same team in the same match and the same possession.
+Stage	What happens	Output
+1. Data ingestion	Load Premier League results + StatsBomb match/event data	Raw match and event tables
+2. Cleaning	Flatten nested JSON, standardize fields, remove invalid records	Structured data
+3. Event extraction	Separate shots and passes	Shot / pass tables
+4. Spatial encoding	Divide pitch into a 4 × 4 grid	16 pitch zones
+5. Sequence matching	Link each pass to the next same-team shot in the same possession	52K+ pass → shot links
+6. Value estimation	Aggregate subsequent shot xG by pass-origin zone	xG_pass
+7. Decision comparison	Compare xG_pass with actual shot_xg	delta
+8. Context layer	Add score state, time, form, and league position	context_factor
+9. Final metric	Weight expected-value difference by context	decision_cost
 
-This creates pass-to-shot sequences.
-The successful execution identified:
-52,180 pass → shot links
-These sequences allow passes to inherit the xG of the subsequent shot.
-4. Estimating the Passing Alternative
-Pass-to-shot sequences are grouped by pitch zone.
-For each zone:
-xG_pass
-=
-Mean xG of subsequent shots
-following passes from that zone
-This creates a historical estimate of the expected value of continuing the possession instead of shooting immediately.
-5. Shot vs Passing Alternative
-Each shot is assigned the xG_pass corresponding to its pitch zone.
-The pipeline then calculates:
+
+🧠 Decision Framework
+Variable	Meaning
+shot_xg	Expected-goal value of the shot actually taken
+xG_pass	Historical mean xG of the next shot after passes from the same zone
+delta	Difference between passing-continuation value and shot value
+context_factor	Match-context weighting
+decision_cost	Context-adjusted decision-value difference
+
+
+Core comparison
 delta = xG_pass - shot_xg
-Example interpretation:
-shot_xg = 0.03
-xG_pass = 0.11
+Result	Interpretation
+delta > 0	Historical passing continuation had higher expected value
+delta < 0	The shot itself had higher expected value
 
-delta = +0.08
-This indicates that historical possession continuations from that zone produced a higher expected value than the actual shot.
-Conversely:
-shot_xg = 0.57
-xG_pass = 0.11
 
-delta = -0.46
-suggests the actual shot represented the higher-value option.
+Contextual extension
+decision_cost = delta × context_factor
 🧩 Feature Engineering
 <p align="center">
   <a href="Feature%20engineering.png">
-    <img
-      src="Feature%20engineering.png"
-      alt="Feature engineering"
-      width="92%"
-    >
+    <img src="Feature%20engineering.png" alt="Feature engineering" width="94%">
   </a>
 </p>
 
-The feature-engineering stage combines:
-Spatial Features
-Shot location
-Pass location
-Pitch zone
-Expected-Value Features
-shot_xg
-xG_pass
-delta
-Match-State Features
-Minute
-Score difference before shot
-Recent form
-League position
-Final Metric
-Decision Cost
-=
-delta × context_factor
-⚽ Score-State Reconstruction
-The project reconstructs the score immediately before each shot.
-Goal events are sorted chronologically within each match and accumulated to obtain:
-Home goals before shot
-Away goals before shot
-The shooter-relative score difference is then calculated as:
-score_diff_before_shot
-This distinguishes situations such as:
-Trailing
-Drawing
-Leading
-and enables match-state-sensitive analysis.
-📈 Decision Cost
-The project defines several interpretable context factors:
-minute_factor
-score_factor
-ranking_factor
-form_factor
-These are multiplied together:
-context_factor
-=
-minute_factor
-× score_factor
-× ranking_factor
-× form_factor
-Finally:
-decision_cost
-=
-delta × context_factor
-The final analytical table is structured as:
-One row = one shot decision
+Feature Group	Examples	Purpose
+Event features	shot xG, pass, possession, outcome	Describe each action
+Spatial features	(x, y), pitch zone	Capture location-dependent value
+Sequence features	same-possession pass → shot	Estimate continuation value
+Match-state features	minute, score difference	Capture in-game pressure
+Team-context features	recent form, league position	Add broader match context
 
-✨ Technical Highlights
-- Processed 1.44M+ nested football event records
-- Extracted 10.8K+ shot events
-- Extracted 404K+ pass events
-- Linked 52K+ same-possession pass-to-shot sequences
-- Engineered a 4 × 4 spatial representation of the pitch
-- Estimated historical alternative value using zone-level xG_pass
-- Compared shot_xg against passing-continuation value
-- Reconstructed score state before individual shots
-- Integrated match-level and event-level football data
-- Built an interpretable expected-value-based Decision Cost framework
-📦 Project Artifacts
-📓 Jupyter Notebook
-The repository includes the full implementation notebook with preprocessing, feature engineering, and saved outputs.
-📄 Full Execution Output
-The repository also contains the preserved Google Colab execution output as a PDF.
-This is useful because the project depends on public external data endpoints, and later local reruns may encounter network-side connection resets even though the original execution completed successfully.
-🎤 Project Presentation
-The presentation provides a visual summary of:
-Research Question
-Data Sources
-Data Preparation
-Feature Engineering
-Decision Framework
-⚠️ Limitations
-This project is an exploratory football decision-analysis framework, not a production predictive model.
-Passing alternative is a proxy
-xG_pass represents a historical zone-level expected value.
-It does not prove that a specific teammate or passing lane was actually available at the exact moment of the shot.
-The event dataset does not contain complete player-tracking information such as:
-Defender locations
-Teammate positioning
-Body orientation
-Passing-lane obstruction
-Off-ball movement
-Different source coverage
-The match-level historical data and StatsBomb event-level data cover different season windows.
-Therefore, cross-source contextual joins depend strongly on:
-Season alignment
-Team-name normalization
-Date alignment
-The archived output shows that recent-form and league-position fields were not populated for some retained event-level rows. In those affected rows, the notebook's fallback logic uses neutral context weights.
-For this reason, the most directly supported part of the analysis is:
-Shot xG
-       vs
-Historical Passing-Alternative xG
-       +
-Pre-shot Score State
-rather than interpreting the contextual weighting as a definitive causal measure.
+
+⚽ Score-State Reconstruction
+Goal events are ordered within each match to reconstruct the score immediately before each shot.
+Derived Feature	Interpretation
+score_diff_before_shot < 0	Shooting team is trailing
+score_diff_before_shot = 0	Match is level
+score_diff_before_shot > 0	Shooting team is leading
+
+
+This allows decision quality to be interpreted relative to the state of the match rather than only by shot location.
+📦 Repository Contents
+File	Purpose
+[`SC3021_GP11_LAB2_16_15.ipynb`](SC3021_GP11_LAB2_16_15.ipynb)	Main analysis notebook
+[`SC3021 GP11 - Colab lab2 overall output.pdf`](SC3021 GP11 - Colab lab2 overall output.pdf)	Preserved successful execution output
+[`SC3021_Shot_Decision_Presentation_compressed.pdf`](SC3021_Shot_Decision_Presentation_compressed.pdf)	Project presentation
+[`Data preparation pipeline.png`](Data preparation pipeline.png)	Pipeline visual
+[`Feature engineering.png`](Feature engineering.png)	Feature-engineering visual
+
+
+✨ Key Technical Work
+Area	Implementation
+Data processing	1.44M+ nested StatsBomb events
+Sequence modelling	52K+ same-possession pass → shot links
+Spatial modelling	4 × 4 pitch-zone representation
+Expected-value analysis	shot_xg vs historical xG_pass
+Match context	Pre-shot score reconstruction
+Data integration	Match-level + event-level football data
+Final framework	Interpretable decision_cost metric
+
+
+⚠️ Notes & Limitations
+<details>
+<summary><b>Click to expand</b></summary>
+
+
+- xG_pass is a historical zone-level proxy, not direct evidence that a specific passing lane was open.
+- Full tracking data is unavailable, so defender positions, teammate availability, body orientation, and passing-lane obstruction are not modelled.
+- Match-level and event-level sources have different season coverage.
+- Cross-source recent-form / league-position joins are therefore sensitive to season, date, and team-name alignment.
+- The strongest directly supported component is the event-level comparison between shot_xg, historical xG_pass, and reconstructed pre-shot score state.
+</details>
+
 🛠️ Tech Stack
-Python
-Pandas
-NumPy
-Requests
-Jupyter Notebook
-Google Colab
-StatsBomb Open Data
-Football-Data.co.uk
-👥 Team & Acknowledgements
-This project was completed as a team project for SC3021 Data Science.
-Team
-- Zi Feng
-- Zhi You
-- Yang
-Special thanks to Zhi You and Yang for their collaboration and contributions throughout the project, including data preparation, analysis, discussion, and presentation development.
-The project also makes use of publicly available football data from:
-- StatsBomb Open Data
-- Football-Data.co.uk
 <p align="center">
-  <strong>SC3021 Data Science Project</strong>
+  <img src="https://img.shields.io/badge/Python-3.x-3776AB?logo=python&logoColor=white">
+  <img src="https://img.shields.io/badge/Pandas-150458?logo=pandas&logoColor=white">
+  <img src="https://img.shields.io/badge/NumPy-013243?logo=numpy&logoColor=white">
+  <img src="https://img.shields.io/badge/Jupyter-F37626?logo=jupyter&logoColor=white">
+  <img src="https://img.shields.io/badge/Google%20Colab-F9AB00?logo=googlecolab&logoColor=white">
+</p>
+
+👥 Team
+Member	Project
+Zi Feng	SC3021 Data Science
+Zhi You	SC3021 Data Science
+Yang	SC3021 Data Science
+
+
+<p align="center">
+  Special thanks to <b>Zhi You</b> and <b>Yang</b> for their collaboration and contributions throughout the project.
 </p>
 
 <p align="center">
-  Turning a subjective football debate into an event-level expected-value analysis.
+  <b>Turning a subjective football debate into an event-level expected-value analysis.</b>
 </p>
